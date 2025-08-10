@@ -1,5 +1,4 @@
 from fastmcp import FastMCP
-from fastmcp.transports.tcp import TCPTransport
 import psutil
 import random
 import os
@@ -13,7 +12,7 @@ SUSPICIOUS_NAMES = [
 ]
 
 # Create MCP server
-mcp = FastMCP("System Monitor MCP", version="1.0")
+mcp = FastMCP("System Monitor MCP")
 
 # ========= HELPER FUNCTIONS =========
 def activate_safety_mode(reason="Unknown error"):
@@ -28,15 +27,18 @@ def record_access_internal():
 # ========= TOOLS =========
 @mcp.tool()
 def record_access() -> dict:
+    """Records access and returns total access count"""
     record_access_internal()
     return {"total_accesses": usage_count}
 
 @mcp.tool()
 def get_usage_count() -> dict:
+    """Returns total recorded accesses so far"""
     return {"total_accesses": usage_count}
 
 @mcp.tool()
 def get_cpu_usage() -> dict:
+    """Returns current CPU usage percentage"""
     record_access_internal()
     global safety_mode
     try:
@@ -49,70 +51,99 @@ def get_cpu_usage() -> dict:
 
 @mcp.tool()
 def get_memory_info() -> dict:
+    """Shows system memory stats (total, available, usage %)"""
     record_access_internal()
     global safety_mode
     try:
         if safety_mode:
             return activate_safety_mode("get_memory_info blocked in safety mode")
         mem = psutil.virtual_memory()
-        return {"total": mem.total, "available": mem.available, "percent": mem.percent}
+        return {
+            "total": mem.total,
+            "available": mem.available, 
+            "percent": mem.percent
+        }
     except Exception as e:
         activate_safety_mode(f"Memory info tool crashed: {str(e)}")
         return {"error": str(e), "note": "Safety Mode Enabled"}
 
 @mcp.tool()
 def get_disk_space() -> dict:
+    """Provides total, used, free, and % disk space"""
     record_access_internal()
     global safety_mode
     try:
         if safety_mode:
             return activate_safety_mode("get_disk_space blocked in safety mode")
         disk = psutil.disk_usage('/')
-        return {"total": disk.total, "used": disk.used, "free": disk.free, "percent": disk.percent}
+        return {
+            "total": disk.total,
+            "used": disk.used,
+            "free": disk.free,
+            "percent": disk.used / disk.total * 100
+        }
     except Exception as e:
         activate_safety_mode(f"Disk usage tool crashed: {str(e)}")
         return {"error": str(e), "note": "Safety Mode Enabled"}
 
 @mcp.tool()
 def antivirus_scan() -> dict:
+    """Scans running processes for suspicious names"""
     record_access_internal()
     global safety_mode
     try:
         if safety_mode:
             return activate_safety_mode("antivirus_scan blocked in safety mode")
+        
         threats = []
         for proc in psutil.process_iter(['pid', 'name']):
             try:
                 pname = proc.info['name'].lower()
                 for sig in SUSPICIOUS_NAMES:
                     if sig in pname:
-                        threats.append({"pid": proc.info['pid'], "name": proc.info['name']})
+                        threats.append({
+                            "pid": proc.info['pid'], 
+                            "name": proc.info['name']
+                        })
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
+        
         if threats:
             activate_safety_mode("Suspicious process detected")
-            return {"suspicious_processes": threats, "note": "Safety Mode Enabled"}
+            return {
+                "suspicious_processes": threats, 
+                "note": "Safety Mode Enabled"
+            }
         else:
-            return {"suspicious_processes": None, "status": "No threats found"}
+            return {
+                "suspicious_processes": None, 
+                "status": "No threats found"
+            }
     except Exception as e:
         activate_safety_mode(f"Antivirus scan crashed: {str(e)}")
         return {"error": str(e), "note": "Safety Mode Enabled"}
 
 @mcp.tool()
 def speed_math_game(action: str = "start", answer: int = None, state: dict = None) -> dict:
+    """Text-based challenge to solve math problems fast"""
     record_access_internal()
     if state is None:
         state = {}
+    
     if action == "start":
         a = random.randint(1, 20)
         b = random.randint(1, 20)
         op = random.choice(['+', '-', '*'])
         question = f"{a} {op} {b}"
         correct = eval(question)
-        return {"message": f"Solve: {question}", "state": {"question": question, "answer": correct}}
+        return {
+            "message": f"Solve: {question}", 
+            "state": {"question": question, "answer": correct}
+        }
     elif action == "answer":
         if not state or "answer" not in state:
             return {"error": "No active question. Start with action='start'."}
+        
         is_correct = (answer == state["answer"])
         response = "✅ Correct!" if is_correct else f"❌ Wrong! The answer was {state['answer']}."
         return {"result": response, "state": {}}
@@ -121,6 +152,7 @@ def speed_math_game(action: str = "start", answer: int = None, state: dict = Non
 
 @mcp.tool()
 def search_simulator(query: str) -> dict:
+    """Simulates a loading search and invites user to play Speed Math"""
     record_access_internal()
     return {
         "message": (
@@ -129,12 +161,13 @@ def search_simulator(query: str) -> dict:
         )
     }
 
-# ========= RUN SERVER ON TCP (RENDER COMPATIBLE) =========
+# ========= RUN SERVER (RENDER COMPATIBLE) =========
 if __name__ == "__main__":
     # Use PORT environment variable from Render, fallback to 8000
     port = int(os.environ.get("PORT", 8000))
-    print(f"Starting MCP server on port {port}")
+    print(f"Starting System Monitor MCP Server on port {port}")
+    print(f"Safety Mode: {safety_mode}")
+    print("Available tools: get_cpu_usage, get_memory_info, get_disk_space, antivirus_scan, speed_math_game, search_simulator, record_access, get_usage_count")
     
-    # Listen on all interfaces with Render-assigned port
-    transport = TCPTransport(host="0.0.0.0", port=port)
-    mcp.run(transport=transport)
+    # Run the MCP server
+    mcp.run()
