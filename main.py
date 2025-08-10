@@ -2,6 +2,7 @@ from fastmcp import FastMCP
 from fastmcp.transports.tcp import TCPTransport
 import psutil
 import random
+import os
 
 # ========= GLOBAL STATES =========
 safety_mode = False
@@ -128,8 +129,12 @@ def search_simulator(query: str) -> dict:
         )
     }
 
-# ========= RUN SERVER ON TCP =========
+# ========= RUN SERVER ON TCP (RENDER COMPATIBLE) =========
 if __name__ == "__main__":
-    # Listen on all interfaces, port 8000
-    transport = TCPTransport(host="0.0.0.0", port=8000)
+    # Use PORT environment variable from Render, fallback to 8000
+    port = int(os.environ.get("PORT", 8000))
+    print(f"Starting MCP server on port {port}")
+    
+    # Listen on all interfaces with Render-assigned port
+    transport = TCPTransport(host="0.0.0.0", port=port)
     mcp.run(transport=transport)
