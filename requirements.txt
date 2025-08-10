@@ -1,2 +1,0 @@
-fastmcp>=2.11.2
-psutil>=7.0.0
