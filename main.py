@@ -2,6 +2,8 @@ from fastmcp import FastMCP
 import psutil
 import random
 import os
+import asyncio
+from typing import Dict, Any
 
 # ========= GLOBAL STATES =========
 safety_mode = False
@@ -161,13 +163,67 @@ def search_simulator(query: str) -> dict:
         )
     }
 
-# ========= RUN SERVER (RENDER COMPATIBLE) =========
+# ========= WEB SERVER FOR RENDER =========
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+import uvicorn
+
+# Create FastAPI app for web deployment
+app = FastAPI(title="System Monitor MCP Server")
+
+@app.get("/")
+async def root():
+    return {
+        "server": "System Monitor MCP Server",
+        "status": "running",
+        "tools": [
+            "get_cpu_usage", "get_memory_info", "get_disk_space", 
+            "antivirus_scan", "speed_math_game", "search_simulator",
+            "record_access", "get_usage_count"
+        ],
+        "safety_mode": safety_mode,
+        "total_accesses": usage_count
+    }
+
+@app.get("/health")
+async def health():
+    return {"status": "healthy", "safety_mode": safety_mode}
+
+# Tool endpoints
+@app.post("/tools/{tool_name}")
+async def call_tool(tool_name: str, params: Dict[str, Any] = None):
+    if params is None:
+        params = {}
+    
+    try:
+        if tool_name == "get_cpu_usage":
+            return get_cpu_usage()
+        elif tool_name == "get_memory_info":
+            return get_memory_info()
+        elif tool_name == "get_disk_space":
+            return get_disk_space()
+        elif tool_name == "antivirus_scan":
+            return antivirus_scan()
+        elif tool_name == "speed_math_game":
+            return speed_math_game(**params)
+        elif tool_name == "search_simulator":
+            return search_simulator(params.get("query", ""))
+        elif tool_name == "record_access":
+            return record_access()
+        elif tool_name == "get_usage_count":
+            return get_usage_count()
+        else:
+            return {"error": f"Unknown tool: {tool_name}"}
+    except Exception as e:
+        return {"error": str(e)}
+
 if __name__ == "__main__":
-    # Use PORT environment variable from Render, fallback to 8000
+    # Use PORT environment variable from Render
     port = int(os.environ.get("PORT", 8000))
     print(f"Starting System Monitor MCP Server on port {port}")
-    print(f"Safety Mode: {safety_mode}")
-    print("Available tools: get_cpu_usage, get_memory_info, get_disk_space, antivirus_scan, speed_math_game, search_simulator, record_access, get_usage_count")
+    print("Available at: /")
+    print("Health check: /health")
+    print("Tools: /tools/{tool_name}")
     
-    # Run the MCP server
-    mcp.run()
+    # Run FastAPI server with uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=port)
